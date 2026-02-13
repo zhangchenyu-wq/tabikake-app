@@ -13,15 +13,12 @@
 </head>
 <body class="bg-slate-50">
     <div id="root"></div>
-
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
-
-        // 設定：APIキーとスプシ・GASのURL
+        // 設定:APIキーとスプシ・GASのURL
         const API_KEY = "4ddbeb9beffd3a63b3b5bd6b";
         const GAS_URL = "https://script.google.com/macros/s/AKfycbz_UbkoSm2OrC1Nq7D0i8sejNNF5fEur3b2h0LJ92C7lpv6iE_8-76XPHr1o-CBKI4/exec";
         const SHEET_URL = "https://docs.google.com/spreadsheets/d/1_iuHiQMSq31JqiKxy8RyxpeRToVwxGup2_c8XKXsaEE/edit?usp=sharing";
-
         function App() {
             const [tab, setTab] = useState('input');
             const [expenses, setExpenses] = useState([]);
@@ -34,7 +31,6 @@
             const [payer, setPayer] = useState('ちょうくん');
             const [isShared, setIsShared] = useState(true);
             const [isSaving, setIsSaving] = useState(false);
-
             const fetchLatestRates = async () => {
                 try {
                     const response = await fetch(`https://v6.exchangerate-api.com/v6/${API_KEY}/latest/JPY`);
@@ -50,7 +46,6 @@
                     }
                 } catch (e) { console.error("レート取得失敗"); }
             };
-
             const fetchHistory = async () => {
                 try {
                     const res = await fetch(GAS_URL);
@@ -64,12 +59,10 @@
                     setExpenses(formatted);
                 } catch (e) { console.error("データ取得失敗"); }
             };
-
             useEffect(() => {
                 fetchLatestRates();
                 fetchHistory();
             }, []);
-
             const addAndSyncExpense = async () => {
                 if (!item || !amount || isSaving) return;
                 setIsSaving(true);
@@ -83,30 +76,33 @@
                     amountJPY: jpy,
                     isShared: isShared 
                 };
-
                 try {
                     await fetch(GAS_URL, { method: "POST", mode: "no-cors", body: JSON.stringify(newExpense) });
                     setExpenses([ { ...newExpense, id: Date.now() }, ...expenses]);
                     setItem(''); setAmount('');
-                    alert("保存完了！");
+                    alert("保存完了!");
                 } catch (e) {
                     alert("保存失敗。");
                 } finally {
                     setIsSaving(false);
                 }
             };
-
             const stats = useMemo(() => {
                 let choPaid = 0, naPaid = 0;
                 expenses.forEach(e => {
                     if (e.isShared) {
-                        if (e.payer === 'ちょうくん') choPaid += e.amountJPY;
-                        else naPaid += e.amountJPY;
+                        if (e.payer === 'ちょうくん' || e["支払った人"] === 'ちょうくん') {
+                            choPaid += e.amountJPY;
+                        } else {
+                            naPaid += e.amountJPY;
+                        }
                     }
                 });
-                return { diff: ((choPaid + naPaid) / 2) - choPaid };
+                const total = choPaid + naPaid;
+                const half = total / 2;
+                const diff = choPaid - half;
+                return { diff: diff, choPaid, naPaid, total };
             }, [expenses]);
-
             return (
                 <div className="max-w-md mx-auto min-h-screen pb-10 shadow-2xl bg-white">
                     <div className="bg-slate-900 text-white p-6 rounded-b-[2rem]">
@@ -125,30 +121,28 @@
                             </div>
                         </div>
                         <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-md border border-white/10">
-                            <p className="text-[10px] font-bold text-slate-400 mb-1">現在の精算（共通分）</p>
+                            <p className="text-[10px] font-bold text-slate-400 mb-1">現在の精算(共通分)</p>
                             <div className="text-xl font-black">
                                 {stats.diff > 0 ? 
-                                    <span className="text-orange-400">ちょう → なー：{Math.abs(Math.round(stats.diff)).toLocaleString()}円</span> : 
-                                    <span className="text-emerald-400">なー → ちょう：{Math.abs(Math.round(stats.diff)).toLocaleString()}円</span>
+                                    <span className="text-orange-400">なー → ちょう:{Math.abs(Math.round(stats.diff)).toLocaleString()}円</span> : 
+                                    <span className="text-emerald-400">ちょう → なー:{Math.abs(Math.round(stats.diff)).toLocaleString()}円</span>
                                 }
                             </div>
                         </div>
                     </div>
-
                     <div className="flex p-4 gap-2">
                         <button onClick={() => setTab('input')} className={`flex-1 py-3 rounded-xl font-bold transition-all ${tab === 'input' ? 'bg-indigo-900 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}>入力</button>
                         <button onClick={() => setTab('check')} className={`flex-1 py-3 rounded-xl font-bold transition-all ${tab === 'check' ? 'bg-indigo-900 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}>履歴</button>
                     </div>
-
                     <main className="px-4 space-y-4">
                         {tab === 'input' ? (
                             <div className="space-y-4">
                                 <input value={item} onChange={e => setItem(e.target.value)} placeholder="店名・内容" className="w-full p-4 bg-slate-50 rounded-2xl text-lg font-bold outline-none border-none focus:ring-2 ring-indigo-500" />
                                 <div className="flex gap-2">
-                                    <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="金額" className="flex-[2] p-4 bg-slate-50 rounded-2xl text-lg font-black outline-none border-none focus:ring-2 ring-indigo-500" />
                                     <select value={currency} onChange={e => setCurrency(e.target.value)} className="flex-1 p-4 bg-slate-50 rounded-2xl font-bold border-none appearance-none">
                                         {Object.keys(rates).map(c => <option key={c} value={c}>{c}</option>)}
                                     </select>
+                                    <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="金額" className="flex-[2] p-4 bg-slate-50 rounded-2xl text-lg font-black outline-none border-none focus:ring-2 ring-indigo-500" />
                                 </div>
                                 <div className="grid grid-cols-2 gap-2">
                                     {['ちょうくん', 'なーちゃん'].map(p => (
@@ -186,7 +180,6 @@
                 </div>
             );
         }
-
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
