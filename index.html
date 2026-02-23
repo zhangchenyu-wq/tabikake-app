@@ -29,7 +29,7 @@
             const [amount, setAmount] = useState('');
             const [currency, setCurrency] = useState('UZS');
             const [payer, setPayer] = useState('ちょうくん');
-            const [isShared, setIsShared] = useState(true);
+            const [beneficiary, setBeneficiary] = useState('両方');
             const [isSaving, setIsSaving] = useState(false);
             const fetchLatestRates = async () => {
                 try {
@@ -67,14 +67,23 @@
                 if (!item || !amount || isSaving) return;
                 setIsSaving(true);
                 const jpy = Math.round(parseFloat(amount) * (rates[currency] || 1));
+                
+                let category = '';
+                if (beneficiary === '両方') {
+                    category = '共通';
+                } else {
+                    category = `${beneficiary}のため`;
+                }
+                
                 const newExpense = {
                     date: new Date().toLocaleString('ja-JP', {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'}),
                     payer: payer,
-                    category: isShared ? "共通" : "個別",
+                    category: category,
+                    beneficiary: beneficiary,
                     item: item,
                     amountLabel: `${Number(amount).toLocaleString()} ${currency}`,
                     amountJPY: jpy,
-                    isShared: isShared 
+                    isShared: beneficiary === '両方'
                 };
                 try {
                     await fetch(GAS_URL, { method: "POST", mode: "no-cors", body: JSON.stringify(newExpense) });
@@ -90,8 +99,11 @@
             const stats = useMemo(() => {
                 let choPaid = 0, naPaid = 0;
                 expenses.forEach(e => {
-                    if (e.isShared) {
-                        if (e.payer === 'ちょうくん' || e["支払った人"] === 'ちょうくん') {
+                    const isPayer = e.payer === 'ちょうくん' || e["支払った人"] === 'ちょうくん';
+                    const isBeneficiary = e.beneficiary === '両方' || e.isShared || e["分類(共通/個別)"] === "共通";
+                    
+                    if (isBeneficiary) {
+                        if (isPayer) {
                             choPaid += e.amountJPY;
                         } else {
                             naPaid += e.amountJPY;
@@ -149,9 +161,23 @@
                                         <button key={p} onClick={() => setPayer(p)} className={`p-4 rounded-2xl font-bold border-2 transition-all ${payer === p ? 'border-indigo-900 bg-indigo-900 text-white shadow-md' : 'border-slate-100 text-slate-400 bg-white'}`}>{p}</button>
                                     ))}
                                 </div>
-                                <div className="flex bg-slate-100 p-1 rounded-2xl">
-                                    <button onClick={() => setIsShared(true)} className={`flex-1 py-3 rounded-xl font-bold text-sm ${isShared ? 'bg-white shadow-sm text-indigo-900' : 'text-slate-400'}`}>共通</button>
-                                    <button onClick={() => setIsShared(false)} className={`flex-1 py-3 rounded-xl font-bold text-sm ${!isShared ? 'bg-white shadow-sm text-indigo-900' : 'text-slate-400'}`}>個別</button>
+                                <div>
+                                    <p className="text-xs font-bold text-slate-500 mb-2 px-1">誰のため?</p>
+                                    <div className="flex bg-slate-100 p-1 rounded-2xl">
+                                        {payer === 'ちょうくん' ? (
+                                            <>
+                                                <button onClick={() => setBeneficiary('ちょうくん')} className={`flex-1 py-3 rounded-xl font-bold text-xs ${beneficiary === 'ちょうくん' ? 'bg-white shadow-sm text-indigo-900' : 'text-slate-400'}`}>ちょう</button>
+                                                <button onClick={() => setBeneficiary('両方')} className={`flex-1 py-3 rounded-xl font-bold text-xs ${beneficiary === '両方' ? 'bg-white shadow-sm text-indigo-900' : 'text-slate-400'}`}>両方</button>
+                                                <button onClick={() => setBeneficiary('なーちゃん')} className={`flex-1 py-3 rounded-xl font-bold text-xs ${beneficiary === 'なーちゃん' ? 'bg-white shadow-sm text-indigo-900' : 'text-slate-400'}`}>なー</button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <button onClick={() => setBeneficiary('なーちゃん')} className={`flex-1 py-3 rounded-xl font-bold text-xs ${beneficiary === 'なーちゃん' ? 'bg-white shadow-sm text-indigo-900' : 'text-slate-400'}`}>なー</button>
+                                                <button onClick={() => setBeneficiary('両方')} className={`flex-1 py-3 rounded-xl font-bold text-xs ${beneficiary === '両方' ? 'bg-white shadow-sm text-indigo-900' : 'text-slate-400'}`}>両方</button>
+                                                <button onClick={() => setBeneficiary('ちょうくん')} className={`flex-1 py-3 rounded-xl font-bold text-xs ${beneficiary === 'ちょうくん' ? 'bg-white shadow-sm text-indigo-900' : 'text-slate-400'}`}>ちょう</button>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                                 <button onClick={addAndSyncExpense} disabled={isSaving} className={`w-full py-5 rounded-3xl font-black text-xl shadow-xl transition-all ${isSaving ? 'bg-slate-300' : 'bg-emerald-500 text-white active:scale-95'}`}>
                                     {isSaving ? "保存中..." : "保存してスプシに送る"}
