@@ -15,10 +15,11 @@
     <div id="root"></div>
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
-        // 設定:APIキーとスプシ・GASのURL
+        
         const API_KEY = "4ddbeb9beffd3a63b3b5bd6b";
         const GAS_URL = "https://script.google.com/macros/s/AKfycbz_UbkoSm2OrC1Nq7D0i8sejNNF5fEur3b2h0LJ92C7lpv6iE_8-76XPHr1o-CBKI4/exec";
         const SHEET_URL = "https://docs.google.com/spreadsheets/d/1_iuHiQMSq31JqiKxy8RyxpeRToVwxGup2_c8XKXsaEE/edit?usp=sharing";
+        
         function App() {
             const [tab, setTab] = useState('input');
             const [expenses, setExpenses] = useState([]);
@@ -32,7 +33,7 @@
             const [beneficiary, setBeneficiary] = useState('両方');
             const [isSaving, setIsSaving] = useState(false);
             const [editingId, setEditingId] = useState(null);
-            const [editingId, setEditingId] = useState(null);
+            
             const fetchLatestRates = async () => {
                 try {
                     const response = await fetch(`https://v6.exchangerate-api.com/v6/${API_KEY}/latest/JPY`);
@@ -48,24 +49,27 @@
                     }
                 } catch (e) { console.error("レート取得失敗"); }
             };
+            
             const fetchHistory = async () => {
                 try {
                     const res = await fetch(GAS_URL);
                     const data = await res.json();
                     const formatted = data.map((d, index) => ({
                         ...d,
-                        id: Math.random().toString(),
-                        rowIndex: index + 2, // スプレッドシートの行番号(ヘッダー行を考慮して+2)
+                        id: `${Date.now()}_${index}`,
+                        rowIndex: index + 2,
                         isShared: d["分類(共通/個別)"] === "共通",
                         amountJPY: Number(d["日本円換算"]) || 0
                     })).reverse();
                     setExpenses(formatted);
                 } catch (e) { console.error("データ取得失敗"); }
             };
+            
             useEffect(() => {
                 fetchLatestRates();
                 fetchHistory();
             }, []);
+            
             const addAndSyncExpense = async () => {
                 if (!item || !amount || isSaving) return;
                 setIsSaving(true);
@@ -79,7 +83,6 @@
                 }
                 
                 if (editingId) {
-                    // 編集モード: 既存の項目を更新
                     const targetExpense = expenses.find(e => e.id === editingId);
                     const updatedExpense = {
                         date: new Date().toLocaleString('ja-JP', {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'}),
@@ -93,7 +96,6 @@
                         rowIndex: targetExpense?.rowIndex
                     };
                     
-                    // スプレッドシートに更新リクエストを送信
                     if (targetExpense?.rowIndex) {
                         try {
                             await fetch(GAS_URL, { 
@@ -115,7 +117,6 @@
                     setIsSaving(false);
                     alert("更新しました!");
                 } else {
-                    // 新規追加モード
                     const newExpense = {
                         date: new Date().toLocaleString('ja-JP', {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'}),
                         payer: payer,
@@ -128,7 +129,7 @@
                     };
                     try {
                         await fetch(GAS_URL, { method: "POST", mode: "no-cors", body: JSON.stringify({ action: 'add', ...newExpense }) });
-                        setExpenses([ { ...newExpense, id: Date.now() }, ...expenses]);
+                        setExpenses([ { ...newExpense, id: Date.now().toString() }, ...expenses]);
                         setItem(''); setAmount('');
                         alert("保存完了!");
                     } catch (e) {
@@ -140,7 +141,6 @@
             };
             
             const loadExpenseToEdit = (expense) => {
-                // 金額と通貨を分離
                 const amountStr = expense.amountLabel || expense["現地通貨額"] || '';
                 const match = amountStr.match(/^([\d,]+)\s*([A-Z]+)$/);
                 
@@ -150,14 +150,18 @@
                     setCurrency(match[2]);
                 }
                 setPayer(expense.payer || expense["支払った人"] || 'ちょうくん');
-                setBeneficiary(expense.beneficiary || (expense.isShared ? '両方' : 'ちょうくん'));
+                
+                const expenseBeneficiary = expense.beneficiary || 
+                    (expense.category === '共通' || expense["分類(共通/個別)"] === "共通" ? '両方' : 
+                    (expense.payer || expense["支払った人"] || 'ちょうくん'));
+                setBeneficiary(expenseBeneficiary);
+                
                 setEditingId(expense.id);
                 setTab('input');
             };
             
             const deleteExpense = async (expense) => {
                 if (confirm('この項目を削除しますか?')) {
-                    // スプレッドシートから削除
                     if (expense.rowIndex) {
                         try {
                             await fetch(GAS_URL, { 
@@ -177,39 +181,6 @@
                 }
             };
             
-            const loadExpenseToEdit = (expense) => {
-                // 履歴から入力欄に読み込む
-                setItem(expense.item || expense["店名/内容"] || '');
-                
-                // 現地通貨額から金額と通貨を抽出
-                const amountLabel = expense.amountLabel || expense["現地通貨額"] || '';
-                const parts = amountLabel.split(' ');
-                if (parts.length >= 2) {
-                    setAmount(parts[0].replace(/,/g, ''));
-                    setCurrency(parts[1]);
-                }
-                
-                setPayer(expense.payer || expense["支払った人"] || 'ちょうくん');
-                
-                // beneficiaryを設定
-                if (expense.beneficiary) {
-                    setBeneficiary(expense.beneficiary);
-                } else if (expense.isShared || expense["分類(共通/個別)"] === "共通") {
-                    setBeneficiary('両方');
-                } else {
-                    setBeneficiary('ちょうくん');
-                }
-                
-                setEditingId(expense.id);
-                setTab('input');
-            };
-            
-            const deleteExpense = (id) => {
-                if (confirm('この項目を削除しますか?')) {
-                    setExpenses(expenses.filter(e => e.id !== id));
-                    alert('削除しました(※スプレッドシートから手動で削除してください)');
-                }
-            };
             const stats = useMemo(() => {
                 let choPaid = 0, naPaid = 0;
                 expenses.forEach(e => {
@@ -229,6 +200,7 @@
                 const diff = choPaid - half;
                 return { diff: diff, choPaid, naPaid, total };
             }, [expenses]);
+            
             return (
                 <div className="max-w-md mx-auto min-h-screen pb-10 shadow-2xl bg-white">
                     <div className="bg-slate-900 text-white p-6 rounded-b-[2rem]">
@@ -263,6 +235,11 @@
                     <main className="px-4 space-y-4">
                         {tab === 'input' ? (
                             <div className="space-y-4">
+                                {editingId && (
+                                    <div className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-3">
+                                        <p className="text-amber-800 font-bold text-sm">✏️ 編集モード</p>
+                                    </div>
+                                )}
                                 <input value={item} onChange={e => setItem(e.target.value)} placeholder="店名・内容" className="w-full p-4 bg-slate-50 rounded-2xl text-lg font-bold outline-none border-none focus:ring-2 ring-indigo-500" />
                                 <div className="flex gap-2">
                                     <select value={currency} onChange={e => setCurrency(e.target.value)} className="flex-1 p-4 bg-slate-50 rounded-2xl font-bold border-none appearance-none">
@@ -293,8 +270,8 @@
                                         )}
                                     </div>
                                 </div>
-                                <button onClick={addAndSyncExpense} disabled={isSaving} className={`w-full py-5 rounded-3xl font-black text-xl shadow-xl transition-all ${isSaving ? 'bg-slate-300' : 'bg-emerald-500 text-white active:scale-95'}`}>
-                                    {isSaving ? "保存中..." : editingId ? "修正して保存" : "保存してスプシに送る"}
+                                <button onClick={addAndSyncExpense} disabled={isSaving} className={`w-full py-5 rounded-3xl font-black text-xl shadow-xl transition-all ${isSaving ? 'bg-slate-300' : editingId ? 'bg-amber-500 text-white active:scale-95' : 'bg-emerald-500 text-white active:scale-95'}`}>
+                                    {isSaving ? "保存中..." : editingId ? "✏️ 修正して保存" : "保存してスプシに送る"}
                                 </button>
                                 {editingId && (
                                     <button 
@@ -317,31 +294,37 @@
                             </div>
                         ) : (
                             <div className="space-y-2">
-                                {expenses.map(e => (
-                                    <div key={e.id} className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div className="flex-1">
-                                                <p className="font-bold text-slate-800 text-sm">{e.item || e["店名/内容"]}</p>
-                                                <p className="text-[10px] text-slate-400 font-bold">{e.payer || e["支払った人"]} • {e.category || e["分類(共通/個別)"]} • {e.amountLabel || e["現地通貨額"]}</p>
-                                            </div>
-                                            <p className="font-black text-indigo-900 ml-2">¥{(e.amountJPY || 0).toLocaleString()}</p>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <button 
-                                                onClick={() => loadExpenseToEdit(e)}
-                                                className="flex-1 py-2 rounded-xl text-xs font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors"
-                                            >
-                                                ✏️ 編集
-                                            </button>
-                                            <button 
-                                                onClick={() => deleteExpense(e)}
-                                                className="flex-1 py-2 rounded-xl text-xs font-bold bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-                                            >
-                                                🗑️ 削除
-                                            </button>
-                                        </div>
+                                {expenses.length === 0 ? (
+                                    <div className="text-center py-10 text-slate-400">
+                                        <p className="font-bold">履歴がありません</p>
                                     </div>
-                                ))}
+                                ) : (
+                                    expenses.map(e => (
+                                        <div key={e.id} className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div className="flex-1">
+                                                    <p className="font-bold text-slate-800 text-sm">{e.item || e["店名/内容"]}</p>
+                                                    <p className="text-[10px] text-slate-400 font-bold">{e.payer || e["支払った人"]} • {e.category || e["分類(共通/個別)"]} • {e.amountLabel || e["現地通貨額"]}</p>
+                                                </div>
+                                                <p className="font-black text-indigo-900 ml-2">¥{(e.amountJPY || 0).toLocaleString()}</p>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button 
+                                                    onClick={() => loadExpenseToEdit(e)}
+                                                    className="flex-1 py-2 rounded-xl text-xs font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors active:scale-95"
+                                                >
+                                                    ✏️ 編集
+                                                </button>
+                                                <button 
+                                                    onClick={() => deleteExpense(e)}
+                                                    className="flex-1 py-2 rounded-xl text-xs font-bold bg-red-50 text-red-600 hover:bg-red-100 transition-colors active:scale-95"
+                                                >
+                                                    🗑️ 削除
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         )}
                     </main>
